@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize or fetch user document & default starter data
+  // Initialize or fetch user document & always ensure starter data exists
   const initUserAndData = async (user: FirebaseUser) => {
     try {
       const userRef = doc(db, 'users', user.uid);
@@ -61,10 +61,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         await setDoc(userRef, newProfile);
         setUserProfile(newProfile);
+      }
 
-        // Seed initial categories
+      // Always ensure default categories exist for this user
+      const catQuery = query(collection(db, 'categories'), where('userId', '==', user.uid));
+      const catSnap = await getDocs(catQuery);
+      if (catSnap.empty) {
         const batch = writeBatch(db);
-        
         DEFAULT_CATEGORIES.forEach((cat) => {
           const catRef = doc(db, 'categories', `${cat.id}-${user.uid}`);
           batch.set(catRef, {
@@ -75,8 +78,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdAt: new Date().toISOString(),
           });
         });
+        await batch.commit();
+      }
 
-        // Seed initial accounts
+      // Always ensure default accounts exist for this user
+      const accQuery = query(collection(db, 'accounts'), where('userId', '==', user.uid));
+      const accSnap = await getDocs(accQuery);
+      if (accSnap.empty) {
+        const batch = writeBatch(db);
         DEFAULT_ACCOUNTS.forEach((acc) => {
           const accRef = doc(db, 'accounts', `${acc.id}-${user.uid}`);
           batch.set(accRef, {
@@ -86,89 +95,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdAt: new Date().toISOString(),
           });
         });
+        await batch.commit();
+      }
 
-        // Seed initial budgets for current month
-        const now = new Date();
+      // Always ensure default budgets exist
+      const now = new Date();
+      const budQuery = query(collection(db, 'budgets'), where('userId', '==', user.uid));
+      const budSnap = await getDocs(budQuery);
+      if (budSnap.empty) {
+        const batch = writeBatch(db);
         const initialBudgets = getInitialBudgets(user.uid, now.getMonth() + 1, now.getFullYear());
         initialBudgets.forEach((bud) => {
           const budRef = doc(db, 'budgets', bud.id);
           batch.set(budRef, bud);
         });
-
-        // Seed sample starting transactions so the user instantly sees a live, beautiful dashboard matching design
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const sampleTx = [
-          {
-            id: `tx-init-1-${user.uid}`,
-            userId: user.uid,
-            type: 'income' as const,
-            amount: 35000,
-            categoryId: `cat-salary-${user.uid}`,
-            accountId: `acc-checking-${user.uid}`,
-            date: todayStr,
-            description: 'เงินเดือนประจำ (Tech Studio Payroll)',
-            note: 'โอนเข้าบัญชีออมทรัพย์หลักเรียบร้อย',
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: `tx-init-2-${user.uid}`,
-            userId: user.uid,
-            type: 'expense' as const,
-            amount: 1450,
-            categoryId: `cat-housing-${user.uid}`,
-            accountId: `acc-checking-${user.uid}`,
-            date: todayStr,
-            description: 'ค่าบริการส่วนกลางและที่พัก (Monthly Rent)',
-            note: 'รอบบิลประจำเดือน',
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: `tx-init-3-${user.uid}`,
-            userId: user.uid,
-            type: 'expense' as const,
-            amount: 820,
-            categoryId: `cat-groceries-${user.uid}`,
-            accountId: `acc-checking-${user.uid}`,
-            date: todayStr,
-            description: 'ซื้อของสดและของใช้ (Organic Market)',
-            note: 'อาหารและของใช้ประจำสัปดาห์',
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: `tx-init-4-${user.uid}`,
-            userId: user.uid,
-            type: 'expense' as const,
-            amount: 310,
-            categoryId: `cat-transport-${user.uid}`,
-            accountId: `acc-ewallet-${user.uid}`,
-            date: todayStr,
-            description: 'เติมเงินบัตรรถไฟฟ้า / ค่าน้ำมัน',
-            note: 'การเดินทาง',
-            createdAt: new Date().toISOString(),
-          }
-        ];
-
-        sampleTx.forEach(tx => {
-          const txRef = doc(db, 'transactions', tx.id);
-          batch.set(txRef, tx);
-        });
-
-        // Welcome notification
-        const notifRef = doc(db, 'notifications', `notif-welcome-${user.uid}`);
-        batch.set(notifRef, {
-          id: `notif-welcome-${user.uid}`,
-          userId: user.uid,
-          type: 'system',
-          title: 'ยินดีต้อนรับสู่ Oatmeal Wealth! ✨',
-          message: 'เริ่มต้นจัดการเงินของคุณอย่างสบายใจ บันทึกรายรับรายจ่าย และวางแผนงบประมาณได้ทันที',
-          isRead: false,
-          createdAt: new Date().toISOString(),
-        });
-
         await batch.commit();
       }
     } catch (err) {
-      console.error('Error initializing user data:', err);
+      console.error('Error in initUserAndData:', err);
     }
   };
 

@@ -16,7 +16,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   initialType = 'expense',
   editingTransaction = null,
 }) => {
-  const { categories, accounts, addTransaction, updateTransaction } = useFinance();
+  const { categories, accounts, addTransaction, updateTransaction, addAccount } = useFinance();
 
   const [type, setType] = useState<TransactionType>(initialType);
   const [amount, setAmount] = useState<string>('');
@@ -36,7 +36,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  // Initialize form state ONLY when modal opens or editingTransaction changes
   useEffect(() => {
+    if (!isOpen) return;
+
     if (editingTransaction) {
       setType(editingTransaction.type);
       setAmount(String(editingTransaction.amount));
@@ -55,21 +58,34 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setNote('');
       setReceiptUrl('');
 
-      // Auto pick first account
-      if (accounts.length > 0) {
-        setAccountId(accounts[0].id);
-        if (accounts.length > 1) {
-          setToAccountId(accounts[1].id);
-        }
+      const firstAccId = accounts.length > 0 ? accounts[0].id : '';
+      setAccountId(firstAccId);
+      if (accounts.length > 1) {
+        setToAccountId(accounts[1].id);
+      } else {
+        setToAccountId('');
       }
-      // Auto pick first category matching type
+
       const matchCats = categories.filter((c) => c.type === (initialType === 'transfer' ? 'expense' : initialType));
-      if (matchCats.length > 0) {
-        setCategoryId(matchCats[0].id);
-      }
+      setCategoryId(matchCats.length > 0 ? matchCats[0].id : '');
     }
     setError('');
-  }, [editingTransaction, initialType, isOpen, accounts, categories]);
+  }, [isOpen, editingTransaction, initialType]);
+
+  // Ensure accountId and categoryId are populated if accounts/categories loaded after modal opened
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!accountId && accounts.length > 0) {
+      setAccountId(accounts[0].id);
+      if (accounts.length > 1 && !toAccountId) {
+        setToAccountId(accounts[1].id);
+      }
+    }
+    const currentCats = categories.filter((c) => c.type === (type === 'transfer' ? 'expense' : type));
+    if (!categoryId && currentCats.length > 0) {
+      setCategoryId(currentCats[0].id);
+    }
+  }, [isOpen, accounts, categories, accountId, categoryId, toAccountId, type]);
 
   if (!isOpen) return null;
 
@@ -97,6 +113,25 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setAmount((cur + addValue).toString());
   };
 
+  // Helper if user has 0 accounts yet
+  const handleCreateDefaultAccount = async () => {
+    try {
+      setSubmitting(true);
+      await addAccount({
+        name: 'เงินสด (Cash Wallet)',
+        type: 'cash',
+        initialBalance: 0,
+        currentBalance: 0,
+        color: '#1C463C',
+        icon: 'payments',
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -108,7 +143,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
 
     if (!accountId) {
-      setError('กรุณาเลือกบัญชี/กระเป๋าเงิน');
+      setError('กรุณาเลือกบัญชี/กระเป๋าเงิน (หากยังไม่มี ให้กดสร้างบัญชีก่อน)');
       return;
     }
 
@@ -135,35 +170,40 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     try {
       setSubmitting(true);
-      if (editingTransaction) {
-        await updateTransaction(editingTransaction.id, {
-          type,
-          amount: parsedAmount,
-          categoryId: type === 'transfer' ? '' : categoryId,
-          accountId,
-          toAccountId: type === 'transfer' ? toAccountId : undefined,
-          date,
-          description: description.trim(),
-          note: note.trim() || undefined,
-          receiptUrl: receiptUrl || undefined,
-        });
+
+      // Build clean payload without any undefined values
+      const payload: any = {
+        type,
+        amount: parsedAmount,
+        accountId,
+        date: date || getTodayStr(),
+        description: description.trim(),
+      };
+
+      if (type === 'transfer') {
+        payload.toAccountId = toAccountId;
+        payload.categoryId = '';
       } else {
-        await addTransaction({
-          type,
-          amount: parsedAmount,
-          categoryId: type === 'transfer' ? '' : categoryId,
-          accountId,
-          toAccountId: type === 'transfer' ? toAccountId : undefined,
-          date,
-          description: description.trim(),
-          note: note.trim() || undefined,
-          receiptUrl: receiptUrl || undefined,
-        });
+        payload.categoryId = categoryId;
+      }
+
+      if (note && note.trim()) {
+        payload.note = note.trim();
+      }
+
+      if (receiptUrl && receiptUrl.trim()) {
+        payload.receiptUrl = receiptUrl;
+      }
+
+      if (editingTransaction) {
+        await updateTransaction(editingTransaction.id, payload);
+      } else {
+        await addTransaction(payload);
       }
       onClose();
-    } catch (err) {
-      console.error(err);
-      setError('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
+    } catch (err: any) {
+      console.error('Error submitting transaction:', err);
+      setError(err?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
     } finally {
       setSubmitting(false);
     }
@@ -185,9 +225,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         {error && (
-          <div className="mt-4 p-3 rounded-xl bg-[#FFDAD6] border border-[#FFB4AB] text-[#93000A] text-sm flex items-center gap-2">
+          <div className="mt-4 p-3 rounded-xl bg-[#FFDAD6] border border-[#FFB4AB] text-[#93000A] text-xs flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px]">error</span>
-            <span>{error}</span>
+            <span className="break-all">{error}</span>
           </div>
         )}
 
@@ -259,7 +299,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <input
                 type="number"
                 step="any"
-                min="0"
+                min="0.01"
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -325,17 +365,27 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <label className="block text-xs font-semibold text-[#5A6567] dark:text-[#A0A8A5] uppercase tracking-wider mb-1.5">
                 {type === 'transfer' ? 'บัญชีต้นทาง (หักเงิน)' : 'บัญชี / กระเป๋าเงิน'}
               </label>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-[#FAF9F6] dark:bg-white/5 border border-[#E3E1DC] dark:border-white/10 rounded-xl text-sm text-[#1E292A] dark:text-white focus:outline-none focus:border-[#2B7A78]"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({formatCurrency(acc.currentBalance)})
-                  </option>
-                ))}
-              </select>
+              {accounts.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={handleCreateDefaultAccount}
+                  className="w-full px-3 py-2.5 bg-[#BFECDD] text-[#1C463C] text-xs font-bold rounded-xl"
+                >
+                  + สร้างกระเป๋าเงินสดเริ่มต้น
+                </button>
+              ) : (
+                <select
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-[#FAF9F6] dark:bg-white/5 border border-[#E3E1DC] dark:border-white/10 rounded-xl text-sm text-[#1E292A] dark:text-white focus:outline-none focus:border-[#2B7A78]"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({formatCurrency(acc.currentBalance)})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 

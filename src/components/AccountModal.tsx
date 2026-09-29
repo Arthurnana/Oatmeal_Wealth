@@ -68,24 +68,26 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
     try {
       setSubmitting(true);
+      const accPayload: any = {
+        name: name.trim(),
+        type,
+        color,
+        icon,
+      };
+      if (accountNumber.trim()) {
+        accPayload.accountNumber = accountNumber.trim();
+      }
+
       if (editingAccount) {
         await updateAccount(editingAccount.id, {
-          name: name.trim(),
-          type,
+          ...accPayload,
           currentBalance: curBal,
-          accountNumber: accountNumber.trim() || undefined,
-          color,
-          icon,
         });
       } else {
         await addAccount({
-          name: name.trim(),
-          type,
+          ...accPayload,
           initialBalance: initBal,
           currentBalance: curBal,
-          accountNumber: accountNumber.trim() || undefined,
-          color,
-          icon,
         });
       }
       onClose();

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   collection,
   query,
@@ -178,52 +178,97 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!currentUser) return;
     try {
       const id = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const newTx: Transaction = {
-        ...data,
+      
+      // Strict clean object without undefined values
+      const newTx: Record<string, any> = {
         id,
         userId: currentUser.uid,
+        type: data.type,
+        amount: Number(data.amount),
+        categoryId: data.categoryId || '',
+        accountId: data.accountId,
+        date: data.date,
+        description: data.description,
         createdAt: new Date().toISOString(),
       };
+
+      if (data.note && typeof data.note === 'string' && data.note.trim()) {
+        newTx.note = data.note.trim();
+      }
+      if (data.receiptUrl && typeof data.receiptUrl === 'string' && data.receiptUrl.trim()) {
+        newTx.receiptUrl = data.receiptUrl;
+      }
+      if (data.type === 'transfer' && data.toAccountId) {
+        newTx.toAccountId = data.toAccountId;
+      }
 
       const batch = writeBatch(db);
       const txRef = doc(db, 'transactions', id);
       batch.set(txRef, newTx);
 
-      // Adjust Account Balances
+      // Adjust Account Balances using setDoc with merge: true to avoid "No document to update"
       if (data.type === 'income') {
         const acc = accounts.find((a) => a.id === data.accountId);
         if (acc) {
           const accRef = doc(db, 'accounts', acc.id);
-          batch.update(accRef, {
-            currentBalance: Number((acc.currentBalance + data.amount).toFixed(2)),
-            updatedAt: new Date().toISOString(),
-          });
+          batch.set(
+            accRef,
+            {
+              userId: currentUser.uid,
+              name: acc.name,
+              type: acc.type,
+              currentBalance: Number((acc.currentBalance + data.amount).toFixed(2)),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         }
       } else if (data.type === 'expense') {
         const acc = accounts.find((a) => a.id === data.accountId);
         if (acc) {
           const accRef = doc(db, 'accounts', acc.id);
-          batch.update(accRef, {
-            currentBalance: Number((acc.currentBalance - data.amount).toFixed(2)),
-            updatedAt: new Date().toISOString(),
-          });
+          batch.set(
+            accRef,
+            {
+              userId: currentUser.uid,
+              name: acc.name,
+              type: acc.type,
+              currentBalance: Number((acc.currentBalance - data.amount).toFixed(2)),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         }
       } else if (data.type === 'transfer' && data.toAccountId) {
         const fromAcc = accounts.find((a) => a.id === data.accountId);
         const toAcc = accounts.find((a) => a.id === data.toAccountId);
         if (fromAcc) {
           const fromRef = doc(db, 'accounts', fromAcc.id);
-          batch.update(fromRef, {
-            currentBalance: Number((fromAcc.currentBalance - data.amount).toFixed(2)),
-            updatedAt: new Date().toISOString(),
-          });
+          batch.set(
+            fromRef,
+            {
+              userId: currentUser.uid,
+              name: fromAcc.name,
+              type: fromAcc.type,
+              currentBalance: Number((fromAcc.currentBalance - data.amount).toFixed(2)),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         }
         if (toAcc) {
           const toRef = doc(db, 'accounts', toAcc.id);
-          batch.update(toRef, {
-            currentBalance: Number((toAcc.currentBalance + data.amount).toFixed(2)),
-            updatedAt: new Date().toISOString(),
-          });
+          batch.set(
+            toRef,
+            {
+              userId: currentUser.uid,
+              name: toAcc.name,
+              type: toAcc.type,
+              currentBalance: Number((toAcc.currentBalance + data.amount).toFixed(2)),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         }
       }
 
@@ -276,6 +321,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
     } catch (error) {
+      console.error('Error adding transaction:', error);
       showToast('ไม่สามารถบันทึกรายการได้ กรุณาลองใหม่อีกครั้ง', 'error');
       handleFirestoreError(error, OperationType.CREATE, 'transactions');
     }
@@ -287,12 +333,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const oldTx = transactions.find((t) => t.id === id);
       if (!oldTx) return;
 
+      const cleanUpdates: Record<string, any> = {
+        updatedAt: new Date().toISOString(),
+      };
+      for (const [k, v] of Object.entries(updatedData)) {
+        if (v !== undefined) {
+          cleanUpdates[k] = v;
+        }
+      }
+
       const batch = writeBatch(db);
       const txRef = doc(db, 'transactions', id);
-      batch.update(txRef, {
-        ...updatedData,
-        updatedAt: new Date().toISOString(),
-      });
+      batch.update(txRef, cleanUpdates);
 
       // Recalculate account impact if amount or account changed
       const newType = updatedData.type || oldTx.type;
@@ -342,6 +394,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await batch.commit();
       showToast('อัปเดตรายการเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error updating transaction:', error);
       showToast('ไม่สามารถอัปเดตรายการได้', 'error');
       handleFirestoreError(error, OperationType.UPDATE, `transactions/${id}`);
     }
@@ -376,6 +429,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await batch.commit();
       showToast('ลบรายการเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error deleting transaction:', error);
       showToast('ไม่สามารถลบรายการได้', 'error');
       handleFirestoreError(error, OperationType.DELETE, `transactions/${id}`);
     }
@@ -386,8 +440,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!currentUser) return;
     try {
       const id = `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const newCat: Category = {
-        ...data,
+      const newCat: Record<string, any> = {
+        name: data.name,
+        type: data.type,
+        icon: data.icon,
+        color: data.color,
         id,
         userId: currentUser.uid,
         isCustom: true,
@@ -396,6 +453,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await setDoc(doc(db, 'categories', id), newCat);
       showToast(`เพิ่มหมวดหมู่ "${data.name}" เรียบร้อยแล้ว`);
     } catch (error) {
+      console.error('Error adding category:', error);
       handleFirestoreError(error, OperationType.CREATE, 'categories');
     }
   };
@@ -403,9 +461,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateCategory = async (id: string, data: Partial<Category>) => {
     if (!currentUser) return;
     try {
-      await updateDoc(doc(db, 'categories', id), data);
+      const cleanData: Record<string, any> = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== undefined) cleanData[k] = v;
+      }
+      await updateDoc(doc(db, 'categories', id), cleanData);
       showToast('อัปเดตหมวดหมู่เรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error updating category:', error);
       handleFirestoreError(error, OperationType.UPDATE, `categories/${id}`);
     }
   };
@@ -416,6 +479,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await deleteDoc(doc(db, 'categories', id));
       showToast('ลบหมวดหมู่เรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error deleting category:', error);
       handleFirestoreError(error, OperationType.DELETE, `categories/${id}`);
     }
   };
@@ -425,15 +489,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!currentUser) return;
     try {
       const id = `acc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const newAcc: Account = {
-        ...data,
+      const newAcc: Record<string, any> = {
         id,
         userId: currentUser.uid,
+        name: data.name,
+        type: data.type,
+        initialBalance: Number(data.initialBalance || 0),
+        currentBalance: Number(data.currentBalance || 0),
+        color: data.color || '#1C463C',
+        icon: data.icon || 'account_balance',
         createdAt: new Date().toISOString(),
       };
+      if (data.accountNumber && data.accountNumber.trim()) {
+        newAcc.accountNumber = data.accountNumber.trim();
+      }
       await setDoc(doc(db, 'accounts', id), newAcc);
       showToast(`เพิ่มบัญชี "${data.name}" สำเร็จ`);
     } catch (error) {
+      console.error('Error adding account:', error);
       handleFirestoreError(error, OperationType.CREATE, 'accounts');
     }
   };
@@ -441,12 +514,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateAccount = async (id: string, data: Partial<Account>) => {
     if (!currentUser) return;
     try {
-      await updateDoc(doc(db, 'accounts', id), {
-        ...data,
+      const cleanData: Record<string, any> = {
         updatedAt: new Date().toISOString(),
-      });
+      };
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== undefined) cleanData[k] = v;
+      }
+      await updateDoc(doc(db, 'accounts', id), cleanData);
       showToast('อัปเดตข้อมูลบัญชีเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error updating account:', error);
       handleFirestoreError(error, OperationType.UPDATE, `accounts/${id}`);
     }
   };
@@ -457,6 +534,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await deleteDoc(doc(db, 'accounts', id));
       showToast('ลบบัญชีเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error deleting account:', error);
       handleFirestoreError(error, OperationType.DELETE, `accounts/${id}`);
     }
   };
@@ -468,7 +546,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const existing = budgets.find((b) => b.categoryId === categoryId && b.month === month && b.year === year);
       if (existing) {
         await updateDoc(doc(db, 'budgets', existing.id), {
-          amount,
+          amount: Number(amount),
           updatedAt: new Date().toISOString(),
         });
       } else {
@@ -477,7 +555,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id,
           userId: currentUser.uid,
           categoryId,
-          amount,
+          amount: Number(amount),
           month,
           year,
           createdAt: new Date().toISOString(),
@@ -486,6 +564,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       showToast('บันทึกงบประมาณเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error setting budget:', error);
       handleFirestoreError(error, OperationType.WRITE, 'budgets');
     }
   };
@@ -496,6 +575,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await deleteDoc(doc(db, 'budgets', id));
       showToast('ลบงบประมาณเรียบร้อยแล้ว');
     } catch (error) {
+      console.error('Error deleting budget:', error);
       handleFirestoreError(error, OperationType.DELETE, `budgets/${id}`);
     }
   };
@@ -527,7 +607,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Reset to default categories & accounts
   const resetToDefaults = async () => {
     if (!currentUser) return;
-    // Clears existing and re-runs init
     try {
       const batch = writeBatch(db);
       transactions.forEach((t) => batch.delete(doc(db, 'transactions', t.id)));
@@ -535,6 +614,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await batch.commit();
       showToast('รีเซ็ตข้อมูลธุรกรรมและงบประมาณเรียบร้อย');
     } catch (error) {
+      console.error('Error resetting to defaults:', error);
       handleFirestoreError(error, OperationType.DELETE, 'transactions');
     }
   };

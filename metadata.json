@@ -1,0 +1,6 @@
+{
+  "name": "Oatmeal Wealth - บันทึกรายรับรายจ่าย & วิเคราะห์การเงิน",
+  "description": "ระบบบันทึกและบริหารจัดการรายรับรายจ่าย วิเคราะห์พฤติกรรมการใช้เงิน วางแผนงบประมาณ และสรุปการเงินบน Cloud พร้อม Google Sign-In",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

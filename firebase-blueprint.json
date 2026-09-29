@@ -1,0 +1,340 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and preferences",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user identifier matching auth uid",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user",
+          "maxLength": 255
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Profile avatar image URL",
+          "maxLength": 1024
+        },
+        "currency": {
+          "type": "string",
+          "description": "Preferred currency code (e.g. THB, USD)",
+          "maxLength": 10
+        },
+        "theme": {
+          "type": "string",
+          "description": "Theme preference: light or dark",
+          "enum": ["light", "dark"]
+        },
+        "notificationsEnabled": {
+          "type": "boolean",
+          "description": "Whether system notifications are enabled"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string when the account was registered"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp ISO string when preferences were last updated"
+        }
+      },
+      "required": ["id", "email", "name"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial income or expense transaction",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique transaction ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Transaction type",
+          "enum": ["income", "expense", "transfer"]
+        },
+        "amount": {
+          "type": "number",
+          "description": "Transaction amount in primary currency (must be positive)"
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Associated category ID",
+          "maxLength": 128
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Associated source wallet or account ID",
+          "maxLength": 128
+        },
+        "toAccountId": {
+          "type": "string",
+          "description": "Destination wallet ID if transfer",
+          "maxLength": 128
+        },
+        "date": {
+          "type": "string",
+          "description": "Transaction date in YYYY-MM-DD format",
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Transaction title or merchant name",
+          "maxLength": 200
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional notes or details",
+          "maxLength": 1000
+        },
+        "receiptUrl": {
+          "type": "string",
+          "description": "Optional receipt image data or URL",
+          "maxLength": 500000
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string when created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp ISO string when updated"
+        }
+      },
+      "required": ["id", "userId", "type", "amount", "categoryId", "accountId", "date", "description"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Expense or income category definition",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique category ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the category",
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "description": "Category type",
+          "enum": ["income", "expense"]
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier (e.g. lucide or material symbol)",
+          "maxLength": 50
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex or theme color string",
+          "maxLength": 30
+        },
+        "isCustom": {
+          "type": "boolean",
+          "description": "Whether this is user-created or default system category"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        }
+      },
+      "required": ["id", "userId", "name", "type", "icon", "color"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Financial wallet, bank account, credit card, or cash reserve",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique account ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Account name (e.g. เงินสด, กสิกรไทย, K-eWallet)",
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "description": "Account type",
+          "enum": ["cash", "bank", "ewallet", "credit", "other"]
+        },
+        "initialBalance": {
+          "type": "number",
+          "description": "Opening balance"
+        },
+        "currentBalance": {
+          "type": "number",
+          "description": "Calculated current balance"
+        },
+        "color": {
+          "type": "string",
+          "description": "Badge or card color",
+          "maxLength": 30
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier",
+          "maxLength": 50
+        },
+        "accountNumber": {
+          "type": "string",
+          "description": "Optional mask of account number (e.g. ••4902)",
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp ISO string"
+        }
+      },
+      "required": ["id", "userId", "name", "type", "initialBalance", "currentBalance"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly spending budget limit per category",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique budget ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Target category ID",
+          "maxLength": 128
+        },
+        "amount": {
+          "type": "number",
+          "description": "Budget limit amount in primary currency"
+        },
+        "month": {
+          "type": "number",
+          "description": "Target month (1-12)"
+        },
+        "year": {
+          "type": "number",
+          "description": "Target year (e.g. 2026)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp ISO string"
+        }
+      },
+      "required": ["id", "userId", "categoryId", "amount", "month", "year"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or user financial alert",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique notification ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Recipient user ID",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Notification category",
+          "enum": ["budget_warning", "budget_exceeded", "transaction_added", "monthly_summary", "system"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Notification header",
+          "maxLength": 150
+        },
+        "message": {
+          "type": "string",
+          "description": "Notification body content",
+          "maxLength": 500
+        },
+        "isRead": {
+          "type": "boolean",
+          "description": "Read status"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string"
+        }
+      },
+      "required": ["id", "userId", "type", "title", "message", "isRead"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account document stored under their authenticated UID"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial ledger transactions owned by user"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Category tags for categorizing income and expenses"
+    },
+    "/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "Wallets and bank accounts tracking balances"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "Monthly category spending limits"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "In-app notifications for alerts and summaries"
+    }
+  }
+}
